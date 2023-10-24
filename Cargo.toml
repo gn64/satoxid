@@ -11,7 +11,7 @@ keywords = ["satisfiability", "sat", "sat-solver", "dimacs"]
 categories = ["encoding"]
 
 [dependencies]
-cadical = { git = "https://github.com/sirandreww/cadical-rs", rev = "b65898198835223e6e5fb37004651f9aed3e15c8" }
+cadical = { git = "https://github.com/sirandreww/cadical-rs", rev = "b65898198835223e6e5fb37004651f9aed3e15c8", optional = true  }
 serde = { version = "1.0.126", features = ["derive"], optional = true }
 
 [dev-dependencies]
