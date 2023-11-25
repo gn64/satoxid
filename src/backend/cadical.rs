@@ -27,7 +27,7 @@ impl Solver for cadical::Solver {
         self.solve().unwrap_or(false)
     }
 
-    fn value(&self, var: i32) -> bool {
+    fn value(&mut self, var: i32) -> bool {
         self.value(var).unwrap_or(true)
     }
 }

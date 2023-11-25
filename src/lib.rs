@@ -192,7 +192,7 @@ pub trait Solver: Backend {
     ///
     /// This function should panic if solve wasn't called previously or wasn't able to
     /// solve the problem.
-    fn value(&self, var: i32) -> bool;
+    fn value(&mut self, var: i32) -> bool;
 }
 
 /// Trait used to express a constraint.
@@ -261,7 +261,7 @@ pub trait ConstraintRepr<V: SatVar>: Constraint<V> {
 }
 
 /// Enum to define the polarity of variables.
-/// By itself `Lit` is a constraint, which requires that the variable it wraps is true 
+/// By itself `Lit` is a constraint, which requires that the variable it wraps is true
 /// or false depending on the Variant `Pos` and `Neg`.
 ///
 /// # Example

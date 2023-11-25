@@ -1,4 +1,4 @@
-use std::iter::once;
+use std::iter::{self, once};
 
 use crate::{CadicalEncoder, Model, SatVar, VarType};
 
@@ -63,17 +63,23 @@ pub fn constraint_implies_repr_tester<V: SatVar + Ord>(
                 "repr is false, but the constraint is satisified"
             );
             assert!(
-                !internal.solve_with(vars().chain(once(-repr))).unwrap(),
+                !internal
+                    .solve_with(vars().chain(once(-repr)), iter::empty())
+                    .unwrap(),
                 "repr could be false, for this satisfying model."
             );
             correct_counter += 1;
         } else {
             assert!(
-                internal.solve_with(vars().chain(once(repr))).unwrap(),
+                internal
+                    .solve_with(vars().chain(once(repr)), iter::empty())
+                    .unwrap(),
                 "The constraint isn't satisified but repr cannot be true."
             );
             assert!(
-                internal.solve_with(vars().chain(once(-repr))).unwrap(),
+                internal
+                    .solve_with(vars().chain(once(-repr)), iter::empty())
+                    .unwrap(),
                 "The constraint isn't satisified but repr cannot be false."
             );
             incorrect_counter += 1;
@@ -120,16 +126,20 @@ pub fn constraint_equals_repr_tester<V: SatVar + Ord>(
                 "repr is false, but the constraint is satisified"
             );
             assert!(
-                !internal.solve_with(vars().chain(once(-repr))).unwrap(),
+                !internal
+                    .solve_with(vars().chain(once(-repr)), iter::empty())
+                    .unwrap(),
                 "repr could be false, for this satisfying model."
             );
             correct_counter += 1;
         } else {
             assert!(
-                !internal.solve_with(vars().chain(once(repr))).unwrap(),
+                !internal
+                    .solve_with(vars().chain(once(repr)), iter::empty())
+                    .unwrap(),
                 "Constraint is not satisified, but repr can be true."
             );
-            assert!(internal.solve_with(vars().chain(once(-repr))).unwrap(),
+            assert!(internal.solve_with(vars().chain(once(-repr)), iter::empty()).unwrap(),
                 "Constraint is not satisified and if repr is false the encoding is unsat.");
             incorrect_counter += 1;
         }
