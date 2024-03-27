@@ -520,6 +520,7 @@ impl<V: SatVar> From<V> for VarType<V> {
 }
 
 /// The Encoder type contains all data used for the encoding.
+#[derive(Clone)]
 pub struct Encoder<V, S> {
     pub backend: S,
     pub varmap: VarMap<V>,

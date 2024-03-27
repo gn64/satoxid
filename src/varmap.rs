@@ -6,6 +6,7 @@ use crate::{Lit, SatVar, VarType};
 /// Mapper from user defined variables and integer sat variables.
 ///
 /// `VarMap` is serializable if the `serde` feature in enabled.
+#[derive(Clone)]
 pub struct VarMap<V> {
     forward: HashMap<V, i32>,
     reverse: HashMap<i32, V>,
@@ -121,7 +122,7 @@ mod serde {
     use ::serde::{
         de::{self, MapAccess, SeqAccess, Visitor},
         ser::SerializeStruct,
-        Deserialize, Deserializer, Serialize, Serializer
+        Deserialize, Deserializer, Serialize, Serializer,
     };
 
     impl<V: Serialize + SatVar> Serialize for VarMap<V> {
@@ -231,9 +232,7 @@ mod serde {
                         match key {
                             Field::Vars => {
                                 if next_id.is_some() {
-                                    return Err(de::Error::duplicate_field(
-                                        "vars",
-                                    ));
+                                    return Err(de::Error::duplicate_field("vars"));
                                 }
                                 next_id = Some(map.next_value()?);
                             }
@@ -290,7 +289,6 @@ mod tests {
 
     #[test]
     fn serde_test() {
-
         let mut varmap = VarMap::<SatVar>::default();
 
         varmap.add_var(Pos(SatVar::A(0, true)));
@@ -305,7 +303,7 @@ mod tests {
         let parsed_json: serde_json::Value = serde_json::from_str(&s).unwrap();
 
         let json = serde_json::json!({
-            "vars" : 6, 
+            "vars" : 6,
             "mapping" : {
                 "1": {"A" : [0, true]},
                 "2": {"A" : [1, true]},
