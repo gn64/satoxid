@@ -1,5 +1,5 @@
+use ahash::{HashMap, HashMapExt};
 use core::fmt::{self, Debug};
-use std::collections::HashMap;
 
 use crate::{Lit, SatVar, VarType};
 

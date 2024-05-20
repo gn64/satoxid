@@ -145,7 +145,6 @@
 
 use core::fmt;
 use std::{
-    collections::HashSet,
     fmt::Debug,
     hash::Hash,
     ops::{Index, Not},
@@ -160,6 +159,7 @@ pub use varmap::VarMap;
 
 mod backend;
 
+use ahash::{HashSet, HashSetExt};
 pub use backend::DimacsWriter;
 
 #[cfg(feature = "cadical")]
