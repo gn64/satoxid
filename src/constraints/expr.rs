@@ -1,6 +1,7 @@
 use std::{
     fmt::{self, Debug},
     ops::{BitAnd, BitOr, Not},
+    sync::Arc,
 };
 
 use super::util::ClauseCollector;
@@ -55,7 +56,7 @@ impl<V: SatVar> Expr<V> {
         L: Into<VarType<V>>,
     {
         Self {
-            inner: ExprEnum::Lit(l.into()),
+            inner: ExprEnum::Lit(l.into().into()),
         }
     }
 }
@@ -101,7 +102,7 @@ impl<V: SatVar> ConstraintRepr<V> for Expr<V> {
 impl<V: SatVar, L: Into<VarType<V>>> From<L> for Expr<V> {
     fn from(l: L) -> Self {
         Self {
-            inner: ExprEnum::Lit(l.into()),
+            inner: ExprEnum::Lit(l.into().into()),
         }
     }
 }
@@ -112,7 +113,7 @@ impl<V, R: Into<Self>> BitAnd<R> for Expr<V> {
     fn bitand(self, rhs: R) -> Self::Output {
         let rhs = rhs.into();
         Self {
-            inner: ExprEnum::And(Box::new(self.inner), Box::new(rhs.inner)),
+            inner: ExprEnum::And(Arc::new(self.inner), Arc::new(rhs.inner)),
         }
     }
 }
@@ -123,7 +124,7 @@ impl<V, R: Into<Self>> BitOr<R> for Expr<V> {
     fn bitor(self, rhs: R) -> Self::Output {
         let rhs = rhs.into();
         Self {
-            inner: ExprEnum::Or(Box::new(self.inner), Box::new(rhs.inner)),
+            inner: ExprEnum::Or(Arc::new(self.inner), Arc::new(rhs.inner)),
         }
     }
 }
@@ -133,7 +134,7 @@ impl<V> Not for Expr<V> {
 
     fn not(self) -> Self::Output {
         Self {
-            inner: ExprEnum::Not(Box::new(self.inner)),
+            inner: ExprEnum::Not(Arc::new(self.inner)),
         }
     }
 }
@@ -146,10 +147,10 @@ impl<V: Debug> Debug for Expr<V> {
 
 #[derive(Clone)]
 enum ExprEnum<V> {
-    And(Box<ExprEnum<V>>, Box<ExprEnum<V>>),
-    Or(Box<ExprEnum<V>>, Box<ExprEnum<V>>),
-    Not(Box<ExprEnum<V>>),
-    Lit(VarType<V>),
+    And(Arc<ExprEnum<V>>, Arc<ExprEnum<V>>),
+    Or(Arc<ExprEnum<V>>, Arc<ExprEnum<V>>),
+    Not(Arc<ExprEnum<V>>),
+    Lit(Arc<VarType<V>>),
     Constraint(ExprConstraint<V>),
 }
 
@@ -171,11 +172,11 @@ impl<V: Debug> Debug for ExprEnum<V> {
     }
 }
 
-pub struct ExprConstraint<V>(Box<dyn DynConstraint<V>>);
+pub struct ExprConstraint<V>(Arc<dyn DynConstraint<V>>);
 
 impl<V> Clone for ExprConstraint<V> {
     fn clone(&self) -> Self {
-        Self(self.0.dyn_clone())
+        Self(Arc::clone(&self.0))
     }
 }
 
@@ -190,7 +191,7 @@ impl<V: SatVar> ExprConstraint<V> {
     where
         C: ConstraintRepr<V> + Clone + 'static,
     {
-        Self(Box::new(constraint))
+        Self(Arc::new(constraint))
     }
 }
 
@@ -226,7 +227,11 @@ where
 }
 
 impl<V: SatVar> ExprEnum<V> {
-    fn encode_tree<B: Backend>(self, backend: &mut B, varmap: &mut VarMap<V>) -> i32 {
+    fn encode_tree<B: Backend>(
+        &self,
+        backend: &mut B,
+        varmap: &mut VarMap<V>,
+    ) -> i32 {
         match self {
             ExprEnum::Or(lhs, rhs) => {
                 let lhs_var = lhs.encode_tree(backend, varmap);
@@ -257,11 +262,11 @@ impl<V: SatVar> ExprEnum<V> {
                 backend.add_clause(clause!(e, new_var));
                 new_var
             }
-            ExprEnum::Lit(e) => varmap.add_var(e),
+            ExprEnum::Lit(e) => varmap.add_var((**e).clone()),
             ExprEnum::Constraint(constraint) => {
                 let mut collector = ClauseCollector::default();
-                let repr = constraint.0.encode_repr(&mut collector, varmap);
-
+                let repr =
+                    constraint.0.dyn_clone().encode_repr(&mut collector, varmap);
                 for cls in collector.clauses {
                     backend.add_clause(cls.into_iter());
                 }
