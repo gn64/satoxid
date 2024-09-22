@@ -702,11 +702,6 @@ impl<V: SatVar, S: IncrementalSolver> Encoder<V, S> {
         // aux_var を仮定として使用
         let result = self.backend.assumption_solve(std::iter::once(aux_var));
         if result {
-            if commit_if_sat {
-                for clause in &clauses {
-                    self.backend.add_clause(clause.iter().copied());
-                }
-            }
             let assignments = self
                 .varmap
                 .iter_internal_vars()
@@ -728,6 +723,11 @@ impl<V: SatVar, S: IncrementalSolver> Encoder<V, S> {
                     }
                 })
                 .collect();
+            if commit_if_sat {
+                for clause in &clauses {
+                    self.backend.add_clause(clause.iter().copied());
+                }
+            }
             Some(Model { assignments })
         } else {
             None
