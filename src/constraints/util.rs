@@ -1,4 +1,4 @@
-use crate::{clause, Constraint, SatVar, Backend, VarMap};
+use crate::{clause, Backend, Constraint, SatVar, VarMap};
 
 #[derive(Default)]
 pub struct ClauseCollector {
@@ -40,8 +40,7 @@ mod tests {
     use super::*;
     use crate::{
         constraints::{test_util::retry_until_unsat, AtMostK},
-        CadicalEncoder,
-        Lit,
+        CadicalEncoder, Lit,
     };
     #[test]
     fn repr_implies_constraint() {

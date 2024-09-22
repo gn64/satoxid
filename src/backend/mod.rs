@@ -5,3 +5,4 @@ pub use dimacs::DimacsWriter;
 mod cadical;
 #[cfg(feature = "cadical")]
 pub use self::cadical::CadicalEncoder;
+pub mod mock;

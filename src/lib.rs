@@ -155,6 +155,7 @@ pub mod constraints;
 mod circuit;
 mod varmap;
 
+use backend::mock::MockSolver;
 pub use varmap::VarMap;
 
 mod backend;
@@ -193,6 +194,12 @@ pub trait Solver: Backend {
     /// This function should panic if solve wasn't called previously or wasn't able to
     /// solve the problem.
     fn value(&mut self, var: i32) -> bool;
+}
+
+pub trait IncrementalSolver: Solver {
+    fn assumption_solve<I>(&mut self, assumptions: I) -> bool
+    where
+        I: Iterator<Item = i32>;
 }
 
 /// Trait used to express a constraint.
@@ -369,10 +376,6 @@ pub struct Model<V> {
 }
 
 impl<V: SatVar> Model<V> {
-    pub fn new(assignments: HashSet<VarType<V>>) -> Self {
-        Self { assignments }
-    }
-
     /// Returns an interator over assigned literals of user defined SAT variables.
     pub fn vars(&self) -> impl Iterator<Item = Lit<V>> + Clone + '_ {
         self.all_vars().filter_map(|v| match v {
@@ -648,6 +651,62 @@ impl<V: SatVar, S: Solver> Encoder<V, S> {
         let result = self.backend.solve();
 
         if result {
+            let assignments = self
+                .varmap
+                .iter_internal_vars()
+                .map(|v| {
+                    let v = v as i32;
+                    let assignment = self.backend.value(v);
+
+                    if let Some(var) = self.varmap.lookup(v) {
+                        let var = var.unwrap();
+                        let lit = if assignment {
+                            Lit::Pos(var)
+                        } else {
+                            Lit::Neg(var)
+                        };
+                        VarType::Named(lit)
+                    } else {
+                        let lit = if assignment { v } else { -v };
+                        VarType::Unnamed(lit)
+                    }
+                })
+                .collect();
+            Some(Model { assignments })
+        } else {
+            None
+        }
+    }
+}
+
+impl<V: SatVar, S: IncrementalSolver> Encoder<V, S> {
+    fn assumption_solve<C: Constraint<V>>(
+        &mut self,
+        assumptions: C,
+        commit_if_sat: bool,
+    ) -> Option<Model<V>> {
+        let mut temp_encoder = MockSolver::default();
+        assumptions.encode(&mut temp_encoder, &mut self.varmap);
+        let clauses = temp_encoder.get_clauses();
+
+        // 新しい補助変数を作成
+        let aux_var = self.varmap.new_var();
+
+        // 各節に対して (¬aux_var ∨ clause) を追加
+        for clause in &clauses {
+            let mut new_clause = vec![-aux_var];
+            new_clause.extend(clause.iter().copied());
+            self.backend.add_clause(new_clause.into_iter());
+        }
+
+        // aux_var を仮定として使用
+        let result = self.backend.assumption_solve(std::iter::once(aux_var));
+        if result {
+            if commit_if_sat {
+                for clause in &clauses {
+                    self.backend.add_clause(clause.iter().copied());
+                }
+            }
             let assignments = self
                 .varmap
                 .iter_internal_vars()
