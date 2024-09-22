@@ -680,7 +680,7 @@ impl<V: SatVar, S: Solver> Encoder<V, S> {
 }
 
 impl<V: SatVar, S: IncrementalSolver> Encoder<V, S> {
-    fn assumption_solve<C: Constraint<V>>(
+    pub fn assumption_solve<C: Constraint<V>>(
         &mut self,
         assumptions: C,
         commit_if_sat: bool,
