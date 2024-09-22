@@ -102,7 +102,7 @@ impl<V: SatVar> VarMap<V> {
         }
     }
 
-    pub(crate) fn iter_internal_vars(&self) -> impl Iterator<Item = i32> {
+    pub fn iter_internal_vars(&self) -> impl Iterator<Item = i32> {
         1..self.next_id
     }
 }
