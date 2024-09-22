@@ -369,6 +369,10 @@ pub struct Model<V> {
 }
 
 impl<V: SatVar> Model<V> {
+    pub fn new(assignments: HashSet<VarType<V>>) -> Self {
+        Self { assignments }
+    }
+
     /// Returns an interator over assigned literals of user defined SAT variables.
     pub fn vars(&self) -> impl Iterator<Item = Lit<V>> + Clone + '_ {
         self.all_vars().filter_map(|v| match v {
