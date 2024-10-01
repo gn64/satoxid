@@ -679,8 +679,16 @@ impl<V: SatVar, S: Solver> Encoder<V, S> {
     }
 }
 
-impl<V: SatVar, S: IncrementalSolver> Encoder<V, S> {
-    pub fn assumption_solve<C: Constraint<V>>(
+pub trait AssumptionSolver<V: SatVar> {
+    fn assumption_solve<C: Constraint<V>>(
+        &mut self,
+        assumptions: C,
+        commit_if_sat: bool,
+    ) -> Option<Model<V>>;
+}
+
+impl<V: SatVar, S: IncrementalSolver> AssumptionSolver<V> for Encoder<V, S> {
+    fn assumption_solve<C: Constraint<V>>(
         &mut self,
         assumptions: C,
         commit_if_sat: bool,
