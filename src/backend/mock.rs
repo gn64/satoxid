@@ -1,4 +1,4 @@
-use crate::{Backend, IncrementalSolver, Solver};
+use crate::{Backend, IncrementalSolver, SolveResult, Solver};
 
 #[derive(Default)]
 pub struct MockSolver {
@@ -24,8 +24,8 @@ impl Backend for MockSolver {
 }
 
 impl Solver for MockSolver {
-    fn solve(&mut self) -> bool {
-        false
+    fn solve(&mut self) -> SolveResult {
+        SolveResult::Unknown
     }
 
     fn value(&mut self, var: i32) -> bool {
@@ -34,10 +34,10 @@ impl Solver for MockSolver {
 }
 
 impl IncrementalSolver for MockSolver {
-    fn assumption_solve<I>(&mut self, assumptions: I) -> bool
+    fn assumption_solve<I>(&mut self, assumptions: I) -> SolveResult
     where
         I: Iterator<Item = i32>,
     {
-        false
+        SolveResult::Unknown
     }
 }

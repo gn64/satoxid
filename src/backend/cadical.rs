@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::{Backend, Encoder, Solver};
+use crate::{Backend, Encoder, SolveResult, Solver};
 
 /// Encoder using the CaDiCal SAT solver.
 pub type CadicalEncoder<V> = Encoder<V, cadical::Solver>;
@@ -23,8 +23,12 @@ impl Backend for cadical::Solver {
 }
 
 impl Solver for cadical::Solver {
-    fn solve(&mut self) -> bool {
-        self.solve().unwrap_or(false)
+    fn solve(&mut self) -> SolveResult {
+        match self.solve() {
+            Some(true) => SolveResult::Sat,
+            Some(false) => SolveResult::Unsat(None),
+            None => SolveResult::Unknown,
+        }
     }
 
     fn value(&mut self, var: i32) -> bool {

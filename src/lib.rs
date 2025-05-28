@@ -168,6 +168,12 @@ pub use backend::CadicalEncoder;
 
 use constraints::util;
 
+pub enum SolveResult {
+    Sat,
+    Unsat(Option<Vec<i32>>), // assumption literals that form a (possibly minimal) core
+    Unknown,
+}
+
 /// Backend abstraction trait.
 pub trait Backend {
     /// Add raw clause as integer SAT variable.
@@ -187,7 +193,7 @@ pub trait Backend {
 pub trait Solver: Backend {
     /// Solve the encoded SAT problem.
     /// Returns true if the problem is satisfiable.
-    fn solve(&mut self) -> bool;
+    fn solve(&mut self) -> SolveResult;
 
     /// Returns if the integer SAT variable is true in the model or not.
     ///
@@ -197,7 +203,7 @@ pub trait Solver: Backend {
 }
 
 pub trait IncrementalSolver: Solver {
-    fn assumption_solve<I>(&mut self, assumptions: I) -> bool
+    fn assumption_solve<I>(&mut self, assumptions: I) -> SolveResult
     where
         I: Iterator<Item = i32>;
 }
@@ -649,8 +655,7 @@ impl<V: SatVar, S: Solver> Encoder<V, S> {
     /// Otherwise a model of the problem is returned.
     pub fn solve(&mut self) -> Option<Model<V>> {
         let result = self.backend.solve();
-
-        if result {
+        if let SolveResult::Sat = result {
             let assignments = self
                 .varmap
                 .iter_internal_vars()
@@ -709,7 +714,7 @@ impl<V: SatVar, S: IncrementalSolver> AssumptionSolver<V> for Encoder<V, S> {
 
         // aux_var を仮定として使用
         let result = self.backend.assumption_solve(std::iter::once(aux_var));
-        if result {
+        if let SolveResult::Unsat(Some(core)) = result {
             let assignments = self
                 .varmap
                 .iter_internal_vars()
