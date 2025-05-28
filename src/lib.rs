@@ -171,6 +171,7 @@ use constraints::util;
 pub enum SolveResult {
     Sat,
     Unsat(Option<Vec<i32>>), // assumption literals that form a (possibly minimal) core
+    Interrupted,
     Unknown,
 }
 
