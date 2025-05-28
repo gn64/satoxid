@@ -168,6 +168,7 @@ pub use backend::CadicalEncoder;
 
 use constraints::util;
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SolveResult {
     Sat,
     Unsat(Option<Vec<i32>>), // assumption literals that form a (possibly minimal) core
