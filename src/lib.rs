@@ -722,19 +722,19 @@ impl<V: SatVar, S: IncrementalSolver> AssumptionSolver<V> for Encoder<V, S> {
 
         // --- 1. 各制約をガード付きで CNF へ追加 -------------------------------
         for constraint in assumptions {
-            // 1) まず制約を CNF へ
-            let mut tmp = MockSolver::default();
-            let enc_target = constraint.clone();
-            enc_target.encode(&mut tmp, &mut self.varmap);
-            let clauses = tmp.get_clauses();
-
-            // 2) ここで guard を作る  ← 位置を後ろに!!
+            // ① guard 変数を *最初に* 取る
             let aux = self.varmap.new_var();
             aux_literals.push(aux);
 
-            // 3) (-aux ∨ clause) を追加
+            // ② constraint を clone して encode 側に move させる
+            let mut tmp = MockSolver::default();
+            constraint.clone().encode(&mut tmp, &mut self.varmap);
+            let clauses = tmp.get_clauses();
+
+            // ③ (-aux ∨ clause_i) をすべて追加
             for clause in &clauses {
-                let mut guarded = vec![-aux];
+                let mut guarded = Vec::with_capacity(clause.len() + 1);
+                guarded.push(-aux);
                 guarded.extend(clause.iter().copied());
                 self.backend.add_clause(guarded.into_iter());
             }
@@ -750,17 +750,19 @@ impl<V: SatVar, S: IncrementalSolver> AssumptionSolver<V> for Encoder<V, S> {
                 let assignments = self
                     .varmap
                     .iter_internal_vars()
-                    .filter_map(|v| {
-                        // lookup が Some のときだけ評価
-                        self.varmap.lookup(v as i32).map(|var| {
-                            let val = self.backend.value(v as i32);
+                    .map(|v| {
+                        let v = v as i32;
+                        let val = self.backend.value(v);
+                        if let Some(var) = self.varmap.lookup(v) {
                             let lit = if val {
                                 Lit::Pos(var.unwrap())
                             } else {
                                 Lit::Neg(var.unwrap())
                             };
                             VarType::Named(lit)
-                        })
+                        } else {
+                            VarType::Unnamed(if val { v } else { -v })
+                        }
                     })
                     .collect();
 
