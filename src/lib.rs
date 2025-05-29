@@ -748,7 +748,7 @@ impl<V: SatVar, S: IncrementalSolver> AssumptionSolver<V> for Encoder<V, S> {
         }
 
         // --- 2. solve ----------------------------------------------------------
-        match self.backend.assumption_solve(std::iter::once(single_aux)) {
+        match self.backend.assumption_solve(aux_literals.iter().copied()) {
             // ---------- SAT ----------
             SolveResult::Sat => {
                 println!("SAT: varmap {:?}", self.varmap);
