@@ -747,25 +747,37 @@ impl<V: SatVar, S: IncrementalSolver> AssumptionSolver<V> for Encoder<V, S> {
             // ---------- SAT ----------
             SolveResult::Sat => {
                 // モデルを組み立て
-                let assignments = self
+                let assignments: HashSet<_> = self
                     .varmap
                     .iter_internal_vars()
-                    .map(|v| {
+                    .enumerate()
+                    .map(|(i, v)| {
                         let v = v as i32;
                         let val = self.backend.value(v);
+                        println!("Variable {}: internal_id={}, value={}", i, v, val);
                         if let Some(var) = self.varmap.lookup(v) {
                             let lit = if val {
                                 Lit::Pos(var.unwrap())
                             } else {
                                 Lit::Neg(var.unwrap())
                             };
+                            println!("  -> Named: {:?}", lit);
                             VarType::Named(lit)
                         } else {
-                            VarType::Unnamed(if val { v } else { -v })
+                            let unnamed = if val { v } else { -v };
+                            println!("  -> Unnamed: {}", unnamed);
+                            VarType::Unnamed(unnamed)
                         }
                     })
                     .collect();
-
+                println!(
+                    "Total assignments: {}, is_pos count: {}",
+                    assignments.len(),
+                    assignments
+                        .iter()
+                        .filter(|a| matches!(a, VarType::Named(Lit::Pos(_))))
+                        .count()
+                );
                 // 要求があればガード無し節を永続化
                 if commit_if_sat {
                     for (_, clauses) in aux2constraint.values() {
