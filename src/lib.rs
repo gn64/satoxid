@@ -742,7 +742,8 @@ impl<V: SatVar, S: IncrementalSolver> AssumptionSolver<V> for Encoder<V, S> {
                 guarded.extend(clause.iter().copied());
                 self.backend.add_clause(guarded.into_iter());
             }
-            all_constraints.push(constraint);
+            all_constraints.push(constraint.clone());
+            aux2constraint.insert(single_aux, (constraint.clone(), clauses));
         }
 
         // --- 2. solve ----------------------------------------------------------
