@@ -686,66 +686,130 @@ impl<V: SatVar, S: Solver> Encoder<V, S> {
     }
 }
 
+pub enum AssumptionSolveResult<V, C> {
+    Sat(Model<V>),         // 解とモデル
+    Unsat(Option<Vec<C>>), // UNSAT ＋ 取れたコア
+    Interrupted,
+    Unknown, // 未解決
+}
+
 pub trait AssumptionSolver<V: SatVar> {
-    fn assumption_solve<C: Constraint<V>>(
+    /// `assumptions` : 反復可能な制約列  
+    /// `commit_if_sat` : SAT 時に制約を恒久コミットするか
+    fn assumption_solve<I, C>(
         &mut self,
-        assumptions: C,
+        assumptions: I,
         commit_if_sat: bool,
-    ) -> Option<Model<V>>;
+    ) -> AssumptionSolveResult<V, C>
+    where
+        I: IntoIterator<Item = C>,
+        C: Constraint<V> + Clone;
 }
 
 impl<V: SatVar, S: IncrementalSolver> AssumptionSolver<V> for Encoder<V, S> {
-    fn assumption_solve<C: Constraint<V>>(
+    fn assumption_solve<I, C>(
         &mut self,
-        assumptions: C,
+        assumptions: I,
         commit_if_sat: bool,
-    ) -> Option<Model<V>> {
-        let mut temp_encoder = MockSolver::default();
-        assumptions.encode(&mut temp_encoder, &mut self.varmap);
-        let clauses = temp_encoder.get_clauses();
+    ) -> AssumptionSolveResult<V, C>
+    where
+        I: IntoIterator<Item = C>,
+        C: Constraint<V> + Clone,
+    {
+        let mut aux2constraint =
+            std::collections::HashMap::<i32, (C, Vec<Vec<i32>>)>::new();
+        let mut aux_literals = Vec::<i32>::new();
 
-        // 新しい補助変数を作成
-        let aux_var = self.varmap.new_var();
+        // --- 1. 各制約をガード付きで CNF へ追加 -------------------------------
+        for constraint in assumptions {
+            // a) guard 変数生成
+            let aux = self.varmap.new_var();
+            aux_literals.push(aux);
 
-        // 各節に対して (¬aux_var ∨ clause) を追加
-        for clause in &clauses {
-            let mut new_clause = vec![-aux_var];
-            new_clause.extend(clause.iter().copied());
-            self.backend.add_clause(new_clause.into_iter());
+            // b) constraint を clone
+            let enc_target = constraint.clone(); // ← encode 用に複製
+
+            // c) CNF へ変換
+            let mut tmp = MockSolver::default();
+            enc_target.encode(&mut tmp, &mut self.varmap); // ← ここで enc_target が move
+            let clauses = tmp.get_clauses();
+
+            // d) ガード付き節を backend へ
+            for clause in &clauses {
+                let mut guarded = vec![-aux];
+                guarded.extend(clause.iter().copied());
+                self.backend.add_clause(guarded.into_iter());
+            }
+
+            // e) 後で参照できるように (元の) constraint を保存
+            aux2constraint.insert(aux, (constraint, clauses));
         }
 
-        // aux_var を仮定として使用
-        let result = self.backend.assumption_solve(std::iter::once(aux_var));
-        if let SolveResult::Sat = result {
-            let assignments = self
-                .varmap
-                .iter_internal_vars()
-                .map(|v| {
-                    let v = v as i32;
-                    let assignment = self.backend.value(v);
+        // --- 2. solve ----------------------------------------------------------
+        match self.backend.assumption_solve(aux_literals.iter().copied()) {
+            // ---------- SAT ----------
+            SolveResult::Sat => {
+                // モデルを組み立て
+                let assignments = self
+                    .varmap
+                    .iter_internal_vars()
+                    .map(|v| {
+                        let v = v as i32;
+                        let val = self.backend.value(v);
 
-                    if let Some(var) = self.varmap.lookup(v) {
-                        let var = var.unwrap();
-                        let lit = if assignment {
-                            Lit::Pos(var)
+                        if let Some(var) = self.varmap.lookup(v) {
+                            let lit = if val {
+                                Lit::Pos(var.unwrap())
+                            } else {
+                                Lit::Neg(var.unwrap())
+                            };
+                            VarType::Named(lit)
                         } else {
-                            Lit::Neg(var)
-                        };
-                        VarType::Named(lit)
-                    } else {
-                        let lit = if assignment { v } else { -v };
-                        VarType::Unnamed(lit)
+                            VarType::Unnamed(if val { v } else { -v })
+                        }
+                    })
+                    .collect();
+
+                // 要求があればガード無し節を永続化
+                if commit_if_sat {
+                    for (_, clauses) in aux2constraint.values() {
+                        for clause in clauses {
+                            self.backend.add_clause(clause.iter().copied());
+                        }
                     }
-                })
-                .collect();
-            if commit_if_sat {
-                for clause in &clauses {
-                    self.backend.add_clause(clause.iter().copied());
                 }
+
+                AssumptionSolveResult::Sat(Model { assignments })
             }
-            Some(Model { assignments })
-        } else {
-            None
+
+            // ---------- UNSAT (core あり) ----------
+            SolveResult::Unsat(Some(core)) => {
+                // 1. コアに入った guard 変数を HashSet に
+                let core_aux: std::collections::HashSet<i32> =
+                    core.iter().map(|lit| lit.abs()).collect();
+
+                // 2. 失敗した制約を集めつつ，成功した制約を commit
+                let mut failed = Vec::<C>::new();
+                for (aux, (constraint, clauses)) in &aux2constraint {
+                    if core_aux.contains(aux) {
+                        // → UNSAT の原因：failed へ
+                        failed.push(constraint.clone());
+                    } else if commit_if_sat {
+                        // → 満たされた制約：guard を外した節を恒久追加
+                        for clause in clauses {
+                            self.backend.add_clause(clause.iter().copied());
+                        }
+                    }
+                }
+                AssumptionSolveResult::Unsat(Some(failed))
+            }
+
+            // ---------- UNSAT (core なし) ----------
+            SolveResult::Unsat(None) => AssumptionSolveResult::Unsat(None),
+
+            // ---------- Interrupted / Unknown ----------
+            SolveResult::Interrupted => AssumptionSolveResult::Interrupted,
+            SolveResult::Unknown => AssumptionSolveResult::Unknown,
         }
     }
 }
