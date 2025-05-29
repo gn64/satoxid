@@ -716,7 +716,7 @@ impl<V: SatVar, S: IncrementalSolver> AssumptionSolver<V> for Encoder<V, S> {
 
         // aux_var を仮定として使用
         let result = self.backend.assumption_solve(std::iter::once(aux_var));
-        if let SolveResult::Unsat(Some(core)) = result {
+        if let SolveResult::Sat = result {
             let assignments = self
                 .varmap
                 .iter_internal_vars()
