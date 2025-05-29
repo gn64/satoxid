@@ -716,8 +716,6 @@ impl<V: SatVar, S: IncrementalSolver> AssumptionSolver<V> for Encoder<V, S> {
         I: IntoIterator<Item = C>,
         C: Constraint<V> + Clone,
     {
-        println!("=== BEFORE ANY PROCESSING ===");
-        println!("Initial var count: {:?}", self.varmap);
         let mut aux2constraint =
             std::collections::HashMap::<i32, (C, Vec<Vec<i32>>)>::new();
         let mut aux_literals = Vec::<i32>::new();
@@ -729,8 +727,6 @@ impl<V: SatVar, S: IncrementalSolver> AssumptionSolver<V> for Encoder<V, S> {
             let clauses = tmp.get_clauses();
             clauses_vec.push((clauses, constraint));
         }
-        println!("After encoding constraint: varmap {:?}", self.varmap);
-
         for (clauses, constraint) in clauses_vec {
             let aux = self.varmap.new_var(); // 制約ごとの補助変数
             aux_literals.push(aux);
@@ -751,7 +747,6 @@ impl<V: SatVar, S: IncrementalSolver> AssumptionSolver<V> for Encoder<V, S> {
         match self.backend.assumption_solve(aux_literals.iter().copied()) {
             // ---------- SAT ----------
             SolveResult::Sat => {
-                println!("SAT: varmap {:?}", self.varmap);
                 // モデルを組み立て
                 let assignments: HashSet<_> = self
                     .varmap
@@ -760,18 +755,15 @@ impl<V: SatVar, S: IncrementalSolver> AssumptionSolver<V> for Encoder<V, S> {
                     .map(|(i, v)| {
                         let v = v as i32;
                         let val = self.backend.value(v);
-                        println!("Variable {}: internal_id={}, value={}", i, v, val);
                         if let Some(var) = self.varmap.lookup(v) {
                             let lit = if val {
                                 Lit::Pos(var.unwrap())
                             } else {
                                 Lit::Neg(var.unwrap())
                             };
-                            println!("  -> Named: {:?}", lit);
                             VarType::Named(lit)
                         } else {
                             let unnamed = if val { v } else { -v };
-                            println!("  -> Unnamed: {}", unnamed);
                             VarType::Unnamed(unnamed)
                         }
                     })
@@ -779,43 +771,9 @@ impl<V: SatVar, S: IncrementalSolver> AssumptionSolver<V> for Encoder<V, S> {
 
                 // 要求があればガード無し節を永続化
                 if commit_if_sat {
-                    let mut total_clauses = 0;
-                    println!("=== COMMITTING CLAUSES ===");
-                    for (aux, (_, clauses)) in &aux2constraint {
-                        println!(
-                            "Committing constraint with aux {} ({} clauses)",
-                            aux,
-                            clauses.len()
-                        );
-                        for (i, clause) in clauses.iter().enumerate() {
-                            println!("  Committing clause {}: {:?}", i, clause);
+                    for (_, (_, clauses)) in &aux2constraint {
+                        for clause in clauses.iter() {
                             self.backend.add_clause(clause.iter().copied());
-                            total_clauses += 1;
-                        }
-                    }
-                    println!("Total committed clauses: {}", total_clauses);
-
-                    // デバッグ: commitした節が実際に効いているかテスト
-                    println!("=== TESTING COMMITTED CONSTRAINTS ===");
-                    match self.backend.solve() {
-                        SolveResult::Sat => {
-                            println!("Test solve after commit: SAT");
-                            // 同じ変数の値を再確認
-                            for (i, v) in
-                                self.varmap.iter_internal_vars().enumerate()
-                            {
-                                let v = v as i32;
-                                if let Some(var) = self.varmap.lookup(v) {
-                                    let val = self.backend.value(v);
-                                    println!("  After commit - Variable {}: internal_id={}, value={}", i, v, val);
-                                }
-                            }
-                        }
-                        SolveResult::Unsat(_) => {
-                            println!("Test solve after commit: UNSAT - committed constraints are conflicting!");
-                        }
-                        _ => {
-                            println!("Test solve after commit: OTHER");
                         }
                     }
                 }
@@ -838,19 +796,11 @@ impl<V: SatVar, S: IncrementalSolver> AssumptionSolver<V> for Encoder<V, S> {
                         failed.push(constraint.clone());
                     } else if commit_if_sat {
                         // コアに含まれない = 満たされた制約をcommit
-                        println!("Committing satisfied constraint with aux {} ({} clauses)", aux, clauses.len());
                         for clause in clauses {
                             self.backend.add_clause(clause.iter().copied());
                             committed_clauses += 1;
                         }
                     }
-                }
-
-                if commit_if_sat && committed_clauses > 0 {
-                    println!(
-                        "Total committed clauses in UNSAT case: {}",
-                        committed_clauses
-                    );
                 }
                 AssumptionSolveResult::Unsat(Some(failed))
             }
