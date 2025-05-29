@@ -719,27 +719,27 @@ impl<V: SatVar, S: IncrementalSolver> AssumptionSolver<V> for Encoder<V, S> {
         let mut aux2constraint =
             std::collections::HashMap::<i32, (C, Vec<Vec<i32>>)>::new();
         let mut aux_literals = Vec::<i32>::new();
+        let mut clauses_vec = Vec::new();
 
-        // --- 1. 各制約をガード付きで CNF へ追加 -------------------------------
         for constraint in assumptions {
-            // ① guard 変数を *最初に* 取る
-            let aux = self.varmap.new_var();
-            aux_literals.push(aux);
-
             // ② constraint を clone して encode 側に move させる
             let mut tmp = MockSolver::default();
             constraint.clone().encode(&mut tmp, &mut self.varmap);
             let clauses = tmp.get_clauses();
-
+            clauses_vec.push((clauses, constraint));
+        }
+        for (clause, constraint) in clauses_vec {
+            // ① guard 変数を *最初に* 取る
+            let aux = self.varmap.new_var();
             // ③ (-aux ∨ clause_i) をすべて追加
-            for clause in &clauses {
+            for single_clause in &clause {
                 let mut guarded = Vec::with_capacity(clause.len() + 1);
                 guarded.push(-aux);
-                guarded.extend(clause.iter().copied());
+                guarded.extend(single_clause.iter().copied());
                 self.backend.add_clause(guarded.into_iter());
             }
-
-            aux2constraint.insert(aux, (constraint, clauses));
+            aux_literals.push(aux);
+            aux2constraint.insert(aux, (constraint, clause));
         }
 
         // --- 2. solve ----------------------------------------------------------
@@ -770,14 +770,7 @@ impl<V: SatVar, S: IncrementalSolver> AssumptionSolver<V> for Encoder<V, S> {
                         }
                     })
                     .collect();
-                println!(
-                    "Total assignments: {}, is_pos count: {}",
-                    assignments.len(),
-                    assignments
-                        .iter()
-                        .filter(|a| matches!(a, VarType::Named(Lit::Pos(_))))
-                        .count()
-                );
+
                 // 要求があればガード無し節を永続化
                 if commit_if_sat {
                     for (_, clauses) in aux2constraint.values() {
