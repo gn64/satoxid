@@ -741,6 +741,8 @@ impl<V: SatVar, S: IncrementalSolver> AssumptionSolver<V> for Encoder<V, S> {
                 guarded.push(-single_aux); // 同じ補助変数
                 guarded.extend(clause.iter().copied());
                 self.backend.add_clause(guarded.into_iter());
+                //これはsingleの時のみ
+                aux_literals.extend(clause.iter().copied());
             }
             all_constraints.push(constraint.clone());
             aux2constraint.insert(single_aux, (constraint.clone(), clauses));
@@ -778,11 +780,13 @@ impl<V: SatVar, S: IncrementalSolver> AssumptionSolver<V> for Encoder<V, S> {
 
                 // 要求があればガード無し節を永続化
                 if commit_if_sat {
-                    for (_, clauses) in aux2constraint.values() {
-                        for clause in clauses {
-                            self.backend.add_clause(clause.iter().copied());
-                        }
-                    }
+                    // for (_, clauses) in aux2constraint.values() {
+                    //     for clause in clauses {
+                    //         self.backend.add_clause(clause.iter().copied());
+                    //     }
+                    // }
+                    println!("Committing clauses: {:?}", aux_literals);
+                    self.backend.add_clause(aux_literals.into_iter());
                 }
 
                 AssumptionSolveResult::Sat(Model { assignments })
