@@ -725,27 +725,26 @@ impl<V: SatVar, S: IncrementalSolver> AssumptionSolver<V> for Encoder<V, S> {
 
         for constraint in assumptions {
             let mut tmp = MockSolver::default();
-            // ② constraint を clone して encode 側に move させる
             constraint.clone().encode(&mut tmp, &mut self.varmap);
             let clauses = tmp.get_clauses();
             clauses_vec.push((clauses, constraint));
         }
         println!("After encoding constraint: varmap {:?}", self.varmap);
-        // 第2段階：単一の補助変数で全てをガード（修正点）
-        let single_aux = self.varmap.new_var(); // 単一補助変数
-        let mut all_constraints = Vec::new();
+
         for (clauses, constraint) in clauses_vec {
-            // 同じ補助変数で全制約をガード
+            let aux = self.varmap.new_var(); // 制約ごとの補助変数
+            aux_literals.push(aux);
+
+            // この制約の情報を保存
+            aux2constraint.insert(aux, (constraint, clauses.clone()));
+
+            // この制約専用の補助変数でガード
             for clause in &clauses {
                 let mut guarded = Vec::with_capacity(clause.len() + 1);
-                guarded.push(-single_aux); // 同じ補助変数
+                guarded.push(-aux);
                 guarded.extend(clause.iter().copied());
                 self.backend.add_clause(guarded.into_iter());
-                //これはsingleの時のみ
-                aux_literals.extend(clause.iter().copied());
             }
-            all_constraints.push(constraint.clone());
-            aux2constraint.insert(single_aux, (constraint.clone(), clauses));
         }
 
         // --- 2. solve ----------------------------------------------------------
@@ -780,13 +779,19 @@ impl<V: SatVar, S: IncrementalSolver> AssumptionSolver<V> for Encoder<V, S> {
 
                 // 要求があればガード無し節を永続化
                 if commit_if_sat {
-                    // for (_, clauses) in aux2constraint.values() {
-                    //     for clause in clauses {
-                    //         self.backend.add_clause(clause.iter().copied());
-                    //     }
-                    // }
-                    println!("Committing clauses: {:?}", aux_literals);
-                    self.backend.add_clause(aux_literals.into_iter());
+                    let mut total_clauses = 0;
+                    for (aux, (_, clauses)) in &aux2constraint {
+                        println!(
+                            "Committing constraint with aux {} ({} clauses)",
+                            aux,
+                            clauses.len()
+                        );
+                        for clause in clauses {
+                            self.backend.add_clause(clause.iter().copied());
+                            total_clauses += 1;
+                        }
+                    }
+                    println!("Total committed clauses: {}", total_clauses);
                 }
 
                 AssumptionSolveResult::Sat(Model { assignments })
@@ -794,22 +799,32 @@ impl<V: SatVar, S: IncrementalSolver> AssumptionSolver<V> for Encoder<V, S> {
 
             // ---------- UNSAT (core あり) ----------
             SolveResult::Unsat(Some(core)) => {
-                // 1. コアに入った guard 変数を HashSet に
                 let core_aux: std::collections::HashSet<i32> =
                     core.iter().map(|lit| lit.abs()).collect();
 
-                // 2. 失敗した制約を集めつつ，成功した制約を commit
                 let mut failed = Vec::<C>::new();
+                let mut committed_clauses = 0;
+
                 for (aux, (constraint, clauses)) in &aux2constraint {
                     if core_aux.contains(aux) {
-                        // → UNSAT の原因：failed へ
+                        // コアに含まれる = 失敗した制約
+                        println!("Failed constraint with aux {}", aux);
                         failed.push(constraint.clone());
                     } else if commit_if_sat {
-                        // → 満たされた制約：guard を外した節を恒久追加
+                        // コアに含まれない = 満たされた制約をcommit
+                        println!("Committing satisfied constraint with aux {} ({} clauses)", aux, clauses.len());
                         for clause in clauses {
                             self.backend.add_clause(clause.iter().copied());
+                            committed_clauses += 1;
                         }
                     }
+                }
+
+                if commit_if_sat && committed_clauses > 0 {
+                    println!(
+                        "Total committed clauses in UNSAT case: {}",
+                        committed_clauses
+                    );
                 }
                 AssumptionSolveResult::Unsat(Some(failed))
             }
