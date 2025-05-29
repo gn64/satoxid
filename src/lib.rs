@@ -716,18 +716,21 @@ impl<V: SatVar, S: IncrementalSolver> AssumptionSolver<V> for Encoder<V, S> {
         I: IntoIterator<Item = C>,
         C: Constraint<V> + Clone,
     {
+        println!("=== BEFORE ANY PROCESSING ===");
+        println!("Initial var count: {:?}", self.varmap);
         let mut aux2constraint =
             std::collections::HashMap::<i32, (C, Vec<Vec<i32>>)>::new();
         let mut aux_literals = Vec::<i32>::new();
         let mut clauses_vec = Vec::new();
 
+        let mut tmp = MockSolver::default();
         for constraint in assumptions {
             // ② constraint を clone して encode 側に move させる
-            let mut tmp = MockSolver::default();
             constraint.clone().encode(&mut tmp, &mut self.varmap);
             let clauses = tmp.get_clauses();
             clauses_vec.push((clauses, constraint));
         }
+        println!("After encoding constraint: varmap {:?}", self.varmap);
         // 第2段階：単一の補助変数で全てをガード（修正点）
         let single_aux = self.varmap.new_var(); // 単一補助変数
         let mut all_constraints = Vec::new();
@@ -746,6 +749,7 @@ impl<V: SatVar, S: IncrementalSolver> AssumptionSolver<V> for Encoder<V, S> {
         match self.backend.assumption_solve(std::iter::once(single_aux)) {
             // ---------- SAT ----------
             SolveResult::Sat => {
+                println!("SAT: varmap {:?}", self.varmap);
                 // モデルを組み立て
                 let assignments: HashSet<_> = self
                     .varmap
