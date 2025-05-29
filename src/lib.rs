@@ -728,22 +728,22 @@ impl<V: SatVar, S: IncrementalSolver> AssumptionSolver<V> for Encoder<V, S> {
             let clauses = tmp.get_clauses();
             clauses_vec.push((clauses, constraint));
         }
-        for (clause, constraint) in clauses_vec {
-            // ① guard 変数を *最初に* 取る
-            let aux = self.varmap.new_var();
-            // ③ (-aux ∨ clause_i) をすべて追加
-            for single_clause in &clause {
+        // 第2段階：単一の補助変数で全てをガード（修正点）
+        let single_aux = self.varmap.new_var(); // 単一補助変数
+        let mut all_constraints = Vec::new();
+        for (clauses, constraint) in clauses_vec {
+            // 同じ補助変数で全制約をガード
+            for clause in &clauses {
                 let mut guarded = Vec::with_capacity(clause.len() + 1);
-                guarded.push(-aux);
-                guarded.extend(single_clause.iter().copied());
+                guarded.push(-single_aux); // 同じ補助変数
+                guarded.extend(clause.iter().copied());
                 self.backend.add_clause(guarded.into_iter());
             }
-            aux_literals.push(aux);
-            aux2constraint.insert(aux, (constraint, clause));
+            all_constraints.push(constraint);
         }
 
         // --- 2. solve ----------------------------------------------------------
-        match self.backend.assumption_solve(aux_literals.iter().copied()) {
+        match self.backend.assumption_solve(std::iter::once(single_aux)) {
             // ---------- SAT ----------
             SolveResult::Sat => {
                 // モデルを組み立て
