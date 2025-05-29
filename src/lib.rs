@@ -145,7 +145,7 @@
 
 use core::fmt;
 use std::{
-    fmt::Debug,
+    fmt::{Debug, Display},
     hash::Hash,
     ops::{Index, Not},
 };
@@ -174,6 +174,22 @@ pub enum SolveResult {
     Unsat(Option<Vec<i32>>), // assumption literals that form a (possibly minimal) core
     Interrupted,
     Unknown,
+}
+impl Display for SolveResult {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SolveResult::Sat => write!(f, "SAT"),
+            SolveResult::Unsat(core) => {
+                if let Some(core) = core {
+                    write!(f, "UNSAT with core: {:?}", core)
+                } else {
+                    write!(f, "UNSAT without core")
+                }
+            }
+            SolveResult::Interrupted => write!(f, "Interrupted"),
+            SolveResult::Unknown => write!(f, "Unknown"),
+        }
+    }
 }
 
 /// Backend abstraction trait.
@@ -686,11 +702,25 @@ impl<V: SatVar, S: Solver> Encoder<V, S> {
     }
 }
 
+#[derive(Clone)]
 pub enum AssumptionSolveResult<V, C> {
     Sat(Model<V>),         // 解とモデル
     Unsat(Option<Vec<C>>), // UNSAT ＋ 取れたコア
     Interrupted,
     Unknown, // 未解決
+}
+impl Display for AssumptionSolveResult<i32, String> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AssumptionSolveResult::Sat(model) => write!(f, "SAT: {:?}", model),
+            AssumptionSolveResult::Unsat(Some(core)) => {
+                write!(f, "UNSAT with core: {:?}", core)
+            }
+            AssumptionSolveResult::Unsat(None) => write!(f, "UNSAT without core"),
+            AssumptionSolveResult::Interrupted => write!(f, "Interrupted"),
+            AssumptionSolveResult::Unknown => write!(f, "Unknown"),
+        }
+    }
 }
 
 pub trait AssumptionSolver<V: SatVar> {
