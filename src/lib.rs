@@ -722,26 +722,23 @@ impl<V: SatVar, S: IncrementalSolver> AssumptionSolver<V> for Encoder<V, S> {
 
         // --- 1. 各制約をガード付きで CNF へ追加 -------------------------------
         for constraint in assumptions {
-            // a) guard 変数生成
+            // 1) まず制約を CNF へ
+            let mut tmp = MockSolver::default();
+            let enc_target = constraint.clone();
+            enc_target.encode(&mut tmp, &mut self.varmap);
+            let clauses = tmp.get_clauses();
+
+            // 2) ここで guard を作る  ← 位置を後ろに!!
             let aux = self.varmap.new_var();
             aux_literals.push(aux);
 
-            // b) constraint を clone
-            let enc_target = constraint.clone(); // ← encode 用に複製
-
-            // c) CNF へ変換
-            let mut tmp = MockSolver::default();
-            enc_target.encode(&mut tmp, &mut self.varmap); // ← ここで enc_target が move
-            let clauses = tmp.get_clauses();
-
-            // d) ガード付き節を backend へ
+            // 3) (-aux ∨ clause) を追加
             for clause in &clauses {
                 let mut guarded = vec![-aux];
                 guarded.extend(clause.iter().copied());
                 self.backend.add_clause(guarded.into_iter());
             }
 
-            // e) 後で参照できるように (元の) constraint を保存
             aux2constraint.insert(aux, (constraint, clauses));
         }
 
