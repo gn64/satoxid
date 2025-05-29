@@ -723,8 +723,8 @@ impl<V: SatVar, S: IncrementalSolver> AssumptionSolver<V> for Encoder<V, S> {
         let mut aux_literals = Vec::<i32>::new();
         let mut clauses_vec = Vec::new();
 
-        let mut tmp = MockSolver::default();
         for constraint in assumptions {
+            let mut tmp = MockSolver::default();
             // ② constraint を clone して encode 側に move させる
             constraint.clone().encode(&mut tmp, &mut self.varmap);
             let clauses = tmp.get_clauses();
