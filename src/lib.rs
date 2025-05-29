@@ -750,20 +750,17 @@ impl<V: SatVar, S: IncrementalSolver> AssumptionSolver<V> for Encoder<V, S> {
                 let assignments = self
                     .varmap
                     .iter_internal_vars()
-                    .map(|v| {
-                        let v = v as i32;
-                        let val = self.backend.value(v);
-
-                        if let Some(var) = self.varmap.lookup(v) {
+                    .filter_map(|v| {
+                        // lookup が Some のときだけ評価
+                        self.varmap.lookup(v as i32).map(|var| {
+                            let val = self.backend.value(v as i32);
                             let lit = if val {
                                 Lit::Pos(var.unwrap())
                             } else {
                                 Lit::Neg(var.unwrap())
                             };
                             VarType::Named(lit)
-                        } else {
-                            VarType::Unnamed(if val { v } else { -v })
-                        }
+                        })
                     })
                     .collect();
 
