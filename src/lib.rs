@@ -709,12 +709,12 @@ pub enum AssumptionSolveResult<V, C> {
     Interrupted,
     Unknown, // 未解決
 }
-impl Display for AssumptionSolveResult<i32, String> {
+impl<V, C> Display for AssumptionSolveResult<V, C> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AssumptionSolveResult::Sat(model) => write!(f, "SAT: {:?}", model),
-            AssumptionSolveResult::Unsat(Some(core)) => {
-                write!(f, "UNSAT with core: {:?}", core)
+            AssumptionSolveResult::Sat(_) => write!(f, "SAT:"),
+            AssumptionSolveResult::Unsat(Some(c)) => {
+                write!(f, "UNSAT with core: len - {:?}", c.len())
             }
             AssumptionSolveResult::Unsat(None) => write!(f, "UNSAT without core"),
             AssumptionSolveResult::Interrupted => write!(f, "Interrupted"),
