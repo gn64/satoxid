@@ -171,7 +171,7 @@ use constraints::util;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SolveResult {
     Sat,
-    Unsat(Option<Vec<i32>>), // assumption literals that form a (possibly minimal) core
+    Unsat(Option<(Vec<i32>, Vec<i32>)>), // (充足コア、非充足コア)
     Interrupted,
     Unknown,
 }
@@ -704,8 +704,8 @@ impl<V: SatVar, S: Solver> Encoder<V, S> {
 
 #[derive(Clone)]
 pub enum AssumptionSolveResult<V, C> {
-    Sat(Model<V>),         // 解とモデル
-    Unsat(Option<Vec<C>>), // UNSAT ＋ 取れたコア
+    Sat(Model<V>),                   // 解とモデル
+    Unsat(Option<(Vec<C>, Vec<C>)>), // UNSAT ＋ (充足コア,被充足コア)
     Interrupted,
     Unknown, // 未解決
 }
@@ -714,7 +714,12 @@ impl<V, C> Display for AssumptionSolveResult<V, C> {
         match self {
             AssumptionSolveResult::Sat(_) => write!(f, "SAT:"),
             AssumptionSolveResult::Unsat(Some(c)) => {
-                write!(f, "UNSAT with core: len - {:?}", c.len())
+                write!(
+                    f,
+                    "UNSAT with core: len - sat {:?} unsat {:?}",
+                    c.0.len(),
+                    c.1.len()
+                )
             }
             AssumptionSolveResult::Unsat(None) => write!(f, "UNSAT without core"),
             AssumptionSolveResult::Interrupted => write!(f, "Interrupted"),
@@ -813,11 +818,10 @@ impl<V: SatVar, S: IncrementalSolver> AssumptionSolver<V> for Encoder<V, S> {
 
             // ---------- UNSAT (core あり) ----------
             SolveResult::Unsat(Some(core)) => {
+                let mut sat_core = Vec::<C>::new();
                 let core_aux: std::collections::HashSet<i32> =
-                    core.iter().map(|lit| lit.abs()).collect();
-
+                    core.1.iter().map(|lit| lit.abs()).collect();
                 let mut failed = Vec::<C>::new();
-                let mut committed_clauses = 0;
 
                 for (aux, (constraint, clauses)) in &aux2constraint {
                     if core_aux.contains(aux) {
@@ -825,14 +829,14 @@ impl<V: SatVar, S: IncrementalSolver> AssumptionSolver<V> for Encoder<V, S> {
                         println!("Failed constraint with aux {}", aux);
                         failed.push(constraint.clone());
                     } else if commit_if_sat {
+                        sat_core.push(constraint.clone());
                         // コアに含まれない = 満たされた制約をcommit
                         for clause in clauses {
                             self.backend.add_clause(clause.iter().copied());
-                            committed_clauses += 1;
                         }
                     }
                 }
-                AssumptionSolveResult::Unsat(Some(failed))
+                AssumptionSolveResult::Unsat(Some((sat_core, failed)))
             }
 
             // ---------- UNSAT (core なし) ----------
